@@ -145,10 +145,7 @@ def evaluate_weekly_compliance(
                 )
 
             if total_minutes < MIN_WEEKLY_HOURS * 60:
-                reasons.append(
-                    f"Only {total_hours} hours; "
-                    f"{MIN_WEEKLY_HOURS} required"
-                )
+                reasons.append(f"Only {total_hours} hours; {MIN_WEEKLY_HOURS} required")
 
             reason = "; ".join(reasons)
             violating_count += 1

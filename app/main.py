@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
         # Close the MongoDB connection when the application shuts down
         client.close()
 
+
 # Create the FastAPI application instance
 app = FastAPI(
     title="Central Attendance Management System",
@@ -80,6 +81,7 @@ app.include_router(compliance_router)
 # Register notification endpoints
 app.include_router(notifications_router)
 
+
 # Define the root endpoint
 @app.get("/")
 def home():
@@ -88,6 +90,7 @@ def home():
         "message": "Welcome to the Attendance Management System API",
         "status": "running",
     }
+
 
 # Define a health-check endpoint
 @app.get("/health")

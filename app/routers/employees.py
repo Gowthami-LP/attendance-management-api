@@ -31,7 +31,9 @@ def create_employee_endpoint(employee: EmployeeCreate) -> EmployeeResponse:
     return create_employee(employee)
 
 
-@router.get("", response_model=list[EmployeeResponse], dependencies=[Depends(get_current_admin)])
+@router.get(
+    "", response_model=list[EmployeeResponse], dependencies=[Depends(get_current_admin)]
+)
 def list_employees(
     department: str | None = None,
     employee_status: Annotated[
@@ -44,13 +46,21 @@ def list_employees(
 
 
 # Retrieve one employee by employee ID.
-@router.get("/{employee_id}", response_model=EmployeeResponse, dependencies=[Depends(get_current_admin)])
+@router.get(
+    "/{employee_id}",
+    response_model=EmployeeResponse,
+    dependencies=[Depends(get_current_admin)],
+)
 def read_employee(employee_id: str) -> EmployeeResponse:
     return get_employee_by_id(employee_id)
 
 
 # Update only the supplied employee fields.
-@router.patch("/{employee_id}", response_model=EmployeeResponse, dependencies=[Depends(get_current_admin)])
+@router.patch(
+    "/{employee_id}",
+    response_model=EmployeeResponse,
+    dependencies=[Depends(get_current_admin)],
+)
 def edit_employee(
     employee_id: str,
     employee: EmployeeUpdate,
@@ -59,6 +69,10 @@ def edit_employee(
 
 
 # Deactivate an employee while preserving their history.
-@router.patch("/{employee_id}/deactivate", response_model=EmployeeResponse, dependencies=[Depends(get_current_admin)])
+@router.patch(
+    "/{employee_id}/deactivate",
+    response_model=EmployeeResponse,
+    dependencies=[Depends(get_current_admin)],
+)
 def disable_employee(employee_id: str) -> EmployeeResponse:
     return deactivate_employee(employee_id)

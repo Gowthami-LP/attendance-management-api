@@ -60,10 +60,7 @@ def list_notifications(
         "failed",
     }
 
-    if (
-        notification_status is not None
-        and notification_status not in allowed_statuses
-    ):
+    if notification_status is not None and notification_status not in allowed_statuses:
         raise HTTPException(
             status_code=400,
             detail="Unsupported notification status",

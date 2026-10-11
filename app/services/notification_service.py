@@ -28,9 +28,7 @@ def send_notification_email(
     sender = os.getenv("SMTP_FROM_EMAIL")
 
     if not all((smtp_host, sender, smtp_username, smtp_password)):
-        raise RuntimeError(
-            "SMTP configuration is incomplete. Check the .env file."
-        )
+        raise RuntimeError("SMTP configuration is incomplete. Check the .env file.")
 
     message = EmailMessage()
     message["From"] = sender
@@ -151,9 +149,7 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
     report = evaluate_weekly_compliance(week_start)
 
     if report.evaluation_status != "completed":
-        raise ValueError(
-            "Notifications can only be processed for a completed week."
-        )
+        raise ValueError("Notifications can only be processed for a completed week.")
 
     created = 0
     sent = 0
@@ -173,10 +169,7 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
             skipped += 1
             continue
 
-        subject = (
-            "Office Attendance Policy Violation - "
-            f"Week of {report.week_start}"
-        )
+        subject = f"Office Attendance Policy Violation - Week of {report.week_start}"
         body = (
             f"Hello {employee_result.employee_name},\n\n"
             "Our attendance records indicate that you did not meet "

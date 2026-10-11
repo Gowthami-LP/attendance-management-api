@@ -120,9 +120,7 @@ def generate_attendance_report(
 
         for employee in employee_documents:
             employee_id = employee["employee_id"]
-            attendance = attendance_by_employee_date.get(
-                (employee_id, date_text)
-            )
+            attendance = attendance_by_employee_date.get((employee_id, date_text))
 
             entry_time = None
             exit_time = None
@@ -141,8 +139,7 @@ def generate_attendance_report(
                         entry_datetime = datetime.fromisoformat(entry_time)
                         exit_datetime = datetime.fromisoformat(exit_time)
                         duration_minutes = int(
-                            (exit_datetime - entry_datetime).total_seconds()
-                            // 60
+                            (exit_datetime - entry_datetime).total_seconds() // 60
                         )
 
                     working_hours = round(duration_minutes / 60, 2)

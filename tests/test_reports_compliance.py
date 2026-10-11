@@ -8,19 +8,27 @@ from app.services import compliance_service, report_service
 
 @pytest.fixture
 def report_db(monkeypatch, fake_collection, fixed_datetime):
-    employees = fake_collection([{
-        "employee_id": "EMP001",
-        "name": "Taylor Example",
-        "department": "Engineering",
-        "is_active": True,
-    }])
-    attendance = fake_collection([{
-        "employee_id": "EMP001",
-        "date": "2026-10-06",
-        "entry_time": "2026-10-06T09:00:00+05:30",
-        "exit_time": "2026-10-06T15:00:00+05:30",
-        "duration_minutes": 360,
-    }])
+    employees = fake_collection(
+        [
+            {
+                "employee_id": "EMP001",
+                "name": "Taylor Example",
+                "department": "Engineering",
+                "is_active": True,
+            }
+        ]
+    )
+    attendance = fake_collection(
+        [
+            {
+                "employee_id": "EMP001",
+                "date": "2026-10-06",
+                "entry_time": "2026-10-06T09:00:00+05:30",
+                "exit_time": "2026-10-06T15:00:00+05:30",
+                "duration_minutes": 360,
+            }
+        ]
+    )
     monkeypatch.setattr(report_service, "employees_collection", employees)
     monkeypatch.setattr(report_service, "attendance_collection", attendance)
     monkeypatch.setattr(compliance_service, "employees_collection", employees)
@@ -79,22 +87,28 @@ def test_compliance_requires_three_days_and_fifteen_hours(
     fake_collection,
     fixed_datetime,
 ):
-    employees = fake_collection([{
-        "employee_id": "EMP001",
-        "name": "Taylor Example",
-        "department": "Engineering",
-        "is_active": True,
-    }])
-    attendance = fake_collection([
-        {
-            "employee_id": "EMP001",
-            "date": day,
-            "entry_time": f"{day}T09:00:00+05:30",
-            "exit_time": f"{day}T14:00:00+05:30",
-            "duration_minutes": 300,
-        }
-        for day in ("2026-09-28", "2026-09-29", "2026-09-30")
-    ])
+    employees = fake_collection(
+        [
+            {
+                "employee_id": "EMP001",
+                "name": "Taylor Example",
+                "department": "Engineering",
+                "is_active": True,
+            }
+        ]
+    )
+    attendance = fake_collection(
+        [
+            {
+                "employee_id": "EMP001",
+                "date": day,
+                "entry_time": f"{day}T09:00:00+05:30",
+                "exit_time": f"{day}T14:00:00+05:30",
+                "duration_minutes": 300,
+            }
+            for day in ("2026-09-28", "2026-09-29", "2026-09-30")
+        ]
+    )
     monkeypatch.setattr(compliance_service, "employees_collection", employees)
     monkeypatch.setattr(compliance_service, "attendance_collection", attendance)
     monkeypatch.setattr(compliance_service, "datetime", fixed_datetime)
@@ -118,19 +132,35 @@ def test_compliance_marks_incomplete_sessions_for_review(
     fake_collection,
     fixed_datetime,
 ):
-    monkeypatch.setattr(compliance_service, "employees_collection", fake_collection([{
-        "employee_id": "EMP001",
-        "name": "Taylor Example",
-        "department": "Engineering",
-        "is_active": True,
-    }]))
-    monkeypatch.setattr(compliance_service, "attendance_collection", fake_collection([{
-        "employee_id": "EMP001",
-        "date": "2026-09-28",
-        "entry_time": "2026-09-28T09:00:00+05:30",
-        "exit_time": None,
-        "duration_minutes": None,
-    }]))
+    monkeypatch.setattr(
+        compliance_service,
+        "employees_collection",
+        fake_collection(
+            [
+                {
+                    "employee_id": "EMP001",
+                    "name": "Taylor Example",
+                    "department": "Engineering",
+                    "is_active": True,
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        compliance_service,
+        "attendance_collection",
+        fake_collection(
+            [
+                {
+                    "employee_id": "EMP001",
+                    "date": "2026-09-28",
+                    "entry_time": "2026-09-28T09:00:00+05:30",
+                    "exit_time": None,
+                    "duration_minutes": None,
+                }
+            ]
+        ),
+    )
     monkeypatch.setattr(compliance_service, "datetime", fixed_datetime)
 
     result = compliance_service.evaluate_weekly_compliance(date(2026, 9, 28))

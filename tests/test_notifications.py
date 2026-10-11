@@ -12,7 +12,9 @@ def test_send_notification_email_uses_configured_smtp(monkeypatch):
     smtp = MagicMock()
     smtp_context = MagicMock()
     smtp_context.__enter__.return_value = smtp
-    monkeypatch.setattr(notification_service.smtplib, "SMTP", MagicMock(return_value=smtp_context))
+    monkeypatch.setattr(
+        notification_service.smtplib, "SMTP", MagicMock(return_value=smtp_context)
+    )
     monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
     monkeypatch.setenv("SMTP_PORT", "587")
     monkeypatch.setenv("SMTP_USERNAME", "sender")
@@ -49,10 +51,14 @@ def test_duplicate_weekly_notification_is_skipped(
     fake_collection,
     fixed_datetime,
 ):
-    employees = fake_collection([{
-        "employee_id": "EMP001",
-        "email": "employee@example.test",
-    }])
+    employees = fake_collection(
+        [
+            {
+                "employee_id": "EMP001",
+                "email": "employee@example.test",
+            }
+        ]
+    )
     notifications = fake_collection(unique_fields=("employee_id", "week_start"))
     employee = EmployeeCompliance(
         employee_id="EMP001",
@@ -78,8 +84,12 @@ def test_duplicate_weekly_notification_is_skipped(
     )
     monkeypatch.setattr(notification_service, "employees_collection", employees)
     monkeypatch.setattr(notification_service, "notifications_collection", notifications)
-    monkeypatch.setattr(notification_service, "evaluate_weekly_compliance", lambda week: report)
-    monkeypatch.setattr(notification_service, "send_notification_email", lambda **kwargs: None)
+    monkeypatch.setattr(
+        notification_service, "evaluate_weekly_compliance", lambda week: report
+    )
+    monkeypatch.setattr(
+        notification_service, "send_notification_email", lambda **kwargs: None
+    )
     monkeypatch.setattr(notification_service, "datetime", fixed_datetime)
 
     first = notification_service.process_weekly_violations(date(2026, 9, 28))
@@ -104,15 +114,19 @@ def test_delivery_failure_is_recorded_and_retryable(
     fake_collection,
     fixed_datetime,
 ):
-    notifications = fake_collection([{
-        "notification_id": "notification-1",
-        "recipient_email": "employee@example.test",
-        "subject": "Policy notice",
-        "body": "Please review.",
-        "status": "pending",
-        "attempts": 0,
-        "last_error": None,
-    }])
+    notifications = fake_collection(
+        [
+            {
+                "notification_id": "notification-1",
+                "recipient_email": "employee@example.test",
+                "subject": "Policy notice",
+                "body": "Please review.",
+                "status": "pending",
+                "attempts": 0,
+                "last_error": None,
+            }
+        ]
+    )
     monkeypatch.setattr(notification_service, "notifications_collection", notifications)
     monkeypatch.setattr(notification_service, "datetime", fixed_datetime)
     monkeypatch.setattr(
@@ -127,7 +141,10 @@ def test_delivery_failure_is_recorded_and_retryable(
     assert notifications.documents[0]["status"] == "failed"
     assert notifications.documents[0]["attempts"] == 1
     assert "SMTP unavailable" in notifications.documents[0]["last_error"]
-    assert notification_service.retry_failed_notification("notification-1")["status"] == "failed"
+    assert (
+        notification_service.retry_failed_notification("notification-1")["status"]
+        == "failed"
+    )
 
 
 def test_notification_duplicate_index_is_simulated_by_test_store(fake_collection):

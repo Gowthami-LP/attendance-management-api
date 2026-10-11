@@ -8,11 +8,15 @@ from app.services import attendance_service
 
 @pytest.fixture
 def attendance_db(monkeypatch, fake_collection, fixed_datetime):
-    employee = fake_collection([{
-        "employee_id": "EMP001",
-        "name": "Taylor Example",
-        "is_active": True,
-    }])
+    employee = fake_collection(
+        [
+            {
+                "employee_id": "EMP001",
+                "name": "Taylor Example",
+                "is_active": True,
+            }
+        ]
+    )
     records = fake_collection(unique_fields=("employee_id", "date"))
     monkeypatch.setattr(attendance_service, "employees_collection", employee)
     monkeypatch.setattr(attendance_service, "attendance_collection", records)
@@ -39,18 +43,23 @@ def test_check_in_records_employee_and_prevents_duplicate(attendance_db):
 def test_check_out_calculates_working_minutes(attendance_db, fixed_datetime):
     _, records = attendance_db
     entry = fixed_datetime.fixed_now - timedelta(hours=7, minutes=30)
-    records.insert_one({
-        "employee_id": "EMP001",
-        "date": "2026-10-11",
-        "entry_time": entry.isoformat(),
-        "exit_time": None,
-        "duration_minutes": None,
-    })
+    records.insert_one(
+        {
+            "employee_id": "EMP001",
+            "date": "2026-10-11",
+            "entry_time": entry.isoformat(),
+            "exit_time": None,
+            "duration_minutes": None,
+        }
+    )
 
     attendance = attendance_service.check_out("EMP001")
 
     assert attendance.duration_minutes == 450
-    assert datetime.fromisoformat(attendance.exit_time).utcoffset().total_seconds() == 19800
+    assert (
+        datetime.fromisoformat(attendance.exit_time).utcoffset().total_seconds()
+        == 19800
+    )
     assert records.documents[0]["duration_minutes"] == 450
 
 

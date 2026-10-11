@@ -13,18 +13,23 @@ def employees(monkeypatch, fake_collection):
 
 
 def test_employee_create_retrieve_update_and_deactivate(employees):
-    created = employee_service.create_employee(EmployeeCreate(
-        employee_id="EMP001",
-        name="Taylor Example",
-        email="Taylor@example.com",
-        department="Engineering",
-    ))
+    created = employee_service.create_employee(
+        EmployeeCreate(
+            employee_id="EMP001",
+            name="Taylor Example",
+            email="Taylor@example.com",
+            department="Engineering",
+        )
+    )
     assert created.email == "taylor@example.com"
     assert created.is_active is True
 
     retrieved = employee_service.get_employee_by_id("EMP001")
     assert retrieved.name == "Taylor Example"
-    assert employee_service.get_employees(department="engineering")[0].employee_id == "EMP001"
+    assert (
+        employee_service.get_employees(department="engineering")[0].employee_id
+        == "EMP001"
+    )
 
     updated = employee_service.update_employee(
         "EMP001",

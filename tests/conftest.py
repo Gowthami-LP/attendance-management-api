@@ -43,9 +43,13 @@ class FakeCollection:
             for operator, operand in expected.items():
                 if operator == "$options":
                     continue
-                if operator == "$gte" and not (actual is not None and actual >= operand):
+                if operator == "$gte" and not (
+                    actual is not None and actual >= operand
+                ):
                     return False
-                if operator == "$lte" and not (actual is not None and actual <= operand):
+                if operator == "$lte" and not (
+                    actual is not None and actual <= operand
+                ):
                     return False
                 if operator == "$in" and actual not in operand:
                     return False
@@ -98,11 +102,13 @@ class FakeCollection:
         projection: dict[str, Any] | None = None,
     ) -> FakeCursor:
         query = query or {}
-        return FakeCursor([
-            self._project(document, projection)
-            for document in self.documents
-            if self._matches(document, query)
-        ])
+        return FakeCursor(
+            [
+                self._project(document, projection)
+                for document in self.documents
+                if self._matches(document, query)
+            ]
+        )
 
     def insert_one(self, document: dict[str, Any]) -> None:
         for field in self.unique_fields:

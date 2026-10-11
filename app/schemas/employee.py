@@ -22,6 +22,7 @@ class EmployeeCreate(BaseModel):
     # Department must not be empty
     department: str = Field(min_length=2, max_length=50)
 
+
 # Define the employee structure returned by the API
 class EmployeeResponse(BaseModel):
     # Employee's unique company ID
@@ -38,6 +39,7 @@ class EmployeeResponse(BaseModel):
 
     # Indicates whether the employee is active
     is_active: bool = True
+
 
 # Restrict the optional active-status filter to supported values
 EmployeeStatus = Literal["active", "inactive"]

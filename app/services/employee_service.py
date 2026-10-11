@@ -76,10 +76,7 @@ def get_employees(
     )
 
     # Convert MongoDB documents into validated response objects
-    return [
-        EmployeeResponse(**document)
-        for document in employee_documents
-    ]
+    return [EmployeeResponse(**document) for document in employee_documents]
 
 
 # Retrieve one employee by ID

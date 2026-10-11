@@ -119,7 +119,4 @@ def get_employee_attendance(
         {"_id": 0},
     ).sort("date", -1)
 
-    return [
-        AttendanceResponse(**record)
-        for record in records
-    ]
+    return [AttendanceResponse(**record) for record in records]
