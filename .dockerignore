@@ -1,0 +1,39 @@
+# Do not copy local virtual environments
+venv/
+.venv/
+
+# Exclude Python cache files
+__pycache__/
+*.py[cod]
+
+# Keep local secrets outside the Docker image
+.env
+.env.*
+
+# Allow a committed example configuration if you have one
+!.env.example
+
+# Exclude Git metadata
+.git/
+.gitignore
+
+# Exclude local test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Exclude common quality-tool caches
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Exclude editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Exclude generated distribution files
+dist/
+build/
+*.egg-info/

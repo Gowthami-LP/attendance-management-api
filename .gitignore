@@ -1,0 +1,33 @@
+# Ignore the Python virtual environment
+venv/
+.venv/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+
+# Ignore environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Ignore test and tool caches
+.mypy_cache/
+.ruff_cache/
+
+# Ignore generated security reports
+trivy-image-report.json
+gitleaks-report.json
+
+# Ignore VS Code workspace settings if not shared
+.vscode/
+
+# Generated security scan reports
+trivy-report.json
+trivy-image-report.json
+gitleaks-report.json
+
+# Temporary generated output (if not required by the application)
+out.json
