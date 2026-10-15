@@ -14,7 +14,7 @@ class FakeCursor:
 
     def sort(self, field: str, direction: int = 1) -> FakeCursor:
         self.documents.sort(
-            key=lambda document: document.get(field),
+            key=lambda document: (document.get(field) is None, document.get(field)),
             reverse=direction < 0,
         )
         return self
@@ -47,9 +47,15 @@ class FakeCollection:
                     actual is not None and actual >= operand
                 ):
                     return False
+                if operator == "$gt" and not (actual is not None and actual > operand):
+                    return False
                 if operator == "$lte" and not (
                     actual is not None and actual <= operand
                 ):
+                    return False
+                if operator == "$lt" and not (actual is not None and actual < operand):
+                    return False
+                if operator == "$ne" and actual == operand:
                     return False
                 if operator == "$in" and actual not in operand:
                     return False

@@ -1,9 +1,16 @@
 from datetime import date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.database.mongodb import notifications_collection
+from app.routers.auth import get_current_admin
+from app.schemas.notification import (
+    NotificationResponse,
+    NotificationRetryResponse,
+    NotificationStatus,
+    NotificationTriggerResponse,
+)
 from app.services.attendance_service import OFFICE_TIMEZONE
 from app.services.notification_service import (
     process_weekly_violations,
@@ -13,13 +20,17 @@ from app.services.notification_service import (
 router = APIRouter(
     prefix="/api/v1/notifications",
     tags=["Notifications"],
+    dependencies=[Depends(get_current_admin)],
 )
 
 
-@router.post("/weekly-violations")
+@router.post(
+    "/weekly-violations",
+    response_model=NotificationTriggerResponse,
+)
 def trigger_weekly_notifications(
     week_start: Annotated[date | None, Query()] = None,
-) -> dict[str, int | str]:
+) -> NotificationTriggerResponse:
     today = datetime.now(OFFICE_TIMEZONE).date()
     current_monday = today - timedelta(days=today.weekday())
     previous_monday = current_monday - timedelta(days=7)
@@ -38,7 +49,8 @@ def trigger_weekly_notifications(
         )
 
     try:
-        return process_weekly_violations(selected_week)
+        result = process_weekly_violations(selected_week)
+        return NotificationTriggerResponse(**result)
     except ValueError as error:
         raise HTTPException(
             status_code=400,
@@ -46,26 +58,16 @@ def trigger_weekly_notifications(
         ) from error
 
 
-@router.get("")
+@router.get(
+    "",
+    response_model=list[NotificationResponse],
+)
 def list_notifications(
     notification_status: Annotated[
-        str | None,
+        NotificationStatus | None,
         Query(alias="status"),
     ] = None,
-) -> list[dict]:
-    allowed_statuses = {
-        "pending",
-        "sending",
-        "sent",
-        "failed",
-    }
-
-    if notification_status is not None and notification_status not in allowed_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported notification status",
-        )
-
+) -> list[NotificationResponse]:
     query: dict[str, str] = {}
     if notification_status is not None:
         query["status"] = notification_status
@@ -75,11 +77,14 @@ def list_notifications(
         .sort("created_at", -1)
         .limit(100)
     )
-    return list(records)
+    return [NotificationResponse(**record) for record in records]
 
 
-@router.post("/{notification_id}/retry")
-def retry_notification(notification_id: str) -> dict[str, str]:
+@router.post(
+    "/{notification_id}/retry",
+    response_model=NotificationRetryResponse,
+)
+def retry_notification(notification_id: str) -> NotificationRetryResponse:
     result = retry_failed_notification(notification_id)
 
     if result["status"] == "not_found":
@@ -88,4 +93,4 @@ def retry_notification(notification_id: str) -> dict[str, str]:
             detail="Notification not found",
         )
 
-    return result
+    return NotificationRetryResponse(**result)

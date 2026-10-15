@@ -11,12 +11,14 @@ permissions:
 
 jobs:
   validate:
-    name: Test and Security Checks
+    name: Test, Quality and Security Checks
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,7 +32,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run automated tests (Pytest)
         run: python -m pytest -v
 
       - name: Run Ruff lint checks
@@ -42,5 +44,32 @@ jobs:
       - name: Run Bandit security checks
         run: bandit -r app -ll
 
-      - name: Audit dependencies
+      - name: Audit Python dependencies (pip-audit)
         run: pip-audit -r requirements.txt
+
+      - name: Run Gitleaks secret detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy filesystem vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker build -t attendance-api:ci .
+
+      - name: Run Trivy container image scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "attendance-api:ci"
+          format: "table"
+          severity: "CRITICAL"
+          exit-code: "0"

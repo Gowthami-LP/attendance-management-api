@@ -32,6 +32,7 @@ websockets==17.2
 
 # Local validation and development tools
 pytest
+httpx
 httpx2
 ruff
 bandit

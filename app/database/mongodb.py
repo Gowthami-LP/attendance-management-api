@@ -77,11 +77,17 @@ def create_attendance_indexes() -> None:
 
 
 def create_notification_indexes() -> None:
+    # Ensure each notification has a unique notification_id for fast lookup.
+    notifications_collection.create_index(
+        "notification_id",
+        unique=True,
+    )
+
     # Prevent more than one notification record per employee per week.
     notifications_collection.create_index(
         [("employee_id", 1), ("week_start", 1)],
         unique=True,
     )
 
-    # Speed up queries for failed notifications.
+    # Speed up queries for notifications by delivery status.
     notifications_collection.create_index("status")

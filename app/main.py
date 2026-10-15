@@ -2,7 +2,8 @@
 from contextlib import asynccontextmanager
 
 # Import FastAPI
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
+from pymongo.errors import PyMongoError
 
 # Import the MongoDB client and index setup functions
 from app.database.mongodb import (
@@ -12,6 +13,7 @@ from app.database.mongodb import (
     create_database_indexes,
     create_notification_indexes,
 )
+from app.middleware.logging_middleware import StructuredLoggingMiddleware
 
 # Import the application routers
 from app.routers.attendance import router as attendance_router
@@ -63,6 +65,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Register structured logging and request ID middleware
+app.add_middleware(StructuredLoggingMiddleware)
+
 # Register admin authentication endpoints
 app.include_router(auth_router)
 
@@ -100,3 +105,32 @@ def health_check():
         "status": "healthy",
         "application": "attendance-management-api",
     }
+
+
+# Liveness check: confirms the application process is running and responding
+@app.get("/health/live")
+def liveness_check():
+    return {
+        "status": "alive",
+        "application": "attendance-management-api",
+    }
+
+
+# Readiness check: confirms external dependencies (MongoDB) are available
+@app.get("/health/ready")
+def readiness_check(response: Response):
+    try:
+        client.admin.command("ping")
+        return {
+            "status": "ready",
+            "database": "connected",
+            "application": "attendance-management-api",
+        }
+    except (PyMongoError, OSError, RuntimeError) as error:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "not_ready",
+            "database": "disconnected",
+            "error": str(error),
+            "application": "attendance-management-api",
+        }

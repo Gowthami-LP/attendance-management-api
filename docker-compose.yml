@@ -1,12 +1,36 @@
 services:
+  mongo:
+    image: mongo:7.0
+    container_name: attendance-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
     image: attendance-api:v1
+    container_name: attendance-api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
-      MONGO_URI: mongodb://host.docker.internal:27017
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DATABASE: attendance_management_db
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:

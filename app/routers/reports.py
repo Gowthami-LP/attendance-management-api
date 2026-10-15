@@ -1,14 +1,16 @@
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.routers.auth import get_current_admin
 from app.schemas.report import AttendanceReportResponse
 from app.services.report_service import generate_attendance_report
 
 router = APIRouter(
     prefix="/api/v1/reports",
     tags=["Attendance Reports"],
+    dependencies=[Depends(get_current_admin)],
 )
 
 
