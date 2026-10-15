@@ -52,13 +52,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Trivy filesystem vulnerability scan
-        uses: aquasecurity/trivy-action@v0.28.0
+      - name: Install Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          scan-type: "fs"
-          format: "table"
-          severity: "CRITICAL,HIGH"
-          exit-code: "0"
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -67,7 +70,7 @@ jobs:
         run: docker build -t attendance-api:ci .
 
       - name: Run Trivy container image scan
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "attendance-api:ci"
           format: "table"
