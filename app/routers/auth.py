@@ -14,9 +14,21 @@ router = APIRouter(prefix="/api/v1/auth/admin", tags=["Admin Authentication"])
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-@router.post("/login", response_model=AdminLoginResponse)
+@router.post(
+    "/login",
+    response_model=AdminLoginResponse,
+    summary="Log in, optionally scoped to a tenant",
+    description=(
+        "Provide tenant_id to receive a token scoped to that tenant. "
+        "The account must have an active membership in the requested tenant."
+    ),
+)
 def admin_login(request: AdminLoginRequest):
-    return login_admin(request.email.lower(), request.password)
+    return login_admin(
+        request.email.lower(),
+        request.password,
+        tenant_id=request.tenant_id,
+    )
 
 
 def get_current_admin(
@@ -48,11 +60,17 @@ def get_current_admin(
         )
 
     admin = admins_collection.find_one({"email": payload["sub"].lower()})
-    if not admin:
+    if not admin or not admin.get("is_active", True):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Admin account no longer exists",
+            detail="Admin account is unavailable",
         )
+    if admin.get("role", "admin") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    admin["token_tenant_id"] = payload.get("tenant_id")
     return admin
 
 

@@ -1,3 +1,5 @@
+from typing import Any
+
 # Import HTTPException to return API errors
 from fastapi import HTTPException, status
 
@@ -14,10 +16,20 @@ from app.database.mongodb import employees_collection
 from app.schemas.employee import EmployeeCreate, EmployeeResponse, EmployeeUpdate
 
 
-# Register a new employee in MongoDB
-def create_employee(employee: EmployeeCreate) -> EmployeeResponse:
+def _tenant_filter(tenant_id: str) -> dict[str, Any] | str:
+    if tenant_id == "default":
+        return {"$in": ["default", None]}
+    return tenant_id
+
+
+# Register a new employee in MongoDB scoped to a tenant
+def create_employee(
+    employee: EmployeeCreate,
+    tenant_id: str = "default",
+) -> EmployeeResponse:
     # Convert validated employee details into a MongoDB document
     employee_document = {
+        "tenant_id": tenant_id,
         "employee_id": employee.employee_id,
         "name": employee.name,
         "email": str(employee.email).lower(),
@@ -50,13 +62,16 @@ def create_employee(employee: EmployeeCreate) -> EmployeeResponse:
     return EmployeeResponse(**employee_document)
 
 
-# Retrieve employees with optional query filters
+# Retrieve employees with optional query filters scoped to a tenant
 def get_employees(
     department: str | None = None,
     is_active: bool | None = None,
+    tenant_id: str = "default",
 ) -> list[EmployeeResponse]:
-    # Start with an empty MongoDB filter
-    query: dict[str, object] = {}
+    # Scope to tenant
+    query: dict[str, object] = {
+        "tenant_id": _tenant_filter(tenant_id),
+    }
 
     # Filter by department if supplied
     if department is not None:
@@ -79,11 +94,18 @@ def get_employees(
     return [EmployeeResponse(**document) for document in employee_documents]
 
 
-# Retrieve one employee by ID
-def get_employee_by_id(employee_id: str) -> EmployeeResponse:
-    # Search MongoDB for the requested employee.
+# Retrieve one employee by ID scoped to a tenant
+def get_employee_by_id(
+    employee_id: str,
+    tenant_id: str = "default",
+) -> EmployeeResponse:
+    # Search MongoDB for the requested employee within the authorized tenant.
+    query = {
+        "tenant_id": _tenant_filter(tenant_id),
+        "employee_id": employee_id,
+    }
     employee = employees_collection.find_one(
-        {"employee_id": employee_id},
+        query,
         {"_id": 0},
     )
 
@@ -98,10 +120,11 @@ def get_employee_by_id(employee_id: str) -> EmployeeResponse:
     return EmployeeResponse(**employee)
 
 
-# Update employee details
+# Update employee details scoped to a tenant
 def update_employee(
     employee_id: str,
     employee_update: EmployeeUpdate,
+    tenant_id: str = "default",
 ) -> EmployeeResponse:
     # Include only fields explicitly supplied in the PATCH request.
     updates = employee_update.model_dump(exclude_unset=True)
@@ -124,10 +147,15 @@ def update_employee(
     if "email" in updates:
         updates["email"] = str(updates["email"]).lower()
 
+    query = {
+        "tenant_id": _tenant_filter(tenant_id),
+        "employee_id": employee_id,
+    }
+
     try:
         # Update the matching employee and return the updated document.
         employee = employees_collection.find_one_and_update(
-            {"employee_id": employee_id},
+            query,
             {"$set": updates},
             projection={"_id": 0},
             return_document=ReturnDocument.AFTER,
@@ -150,11 +178,19 @@ def update_employee(
     return EmployeeResponse(**employee)
 
 
-# Deactivate an employee
-def deactivate_employee(employee_id: str) -> EmployeeResponse:
+# Deactivate an employee scoped to a tenant
+def deactivate_employee(
+    employee_id: str,
+    tenant_id: str = "default",
+) -> EmployeeResponse:
+    query = {
+        "tenant_id": _tenant_filter(tenant_id),
+        "employee_id": employee_id,
+    }
+
     # Mark the employee inactive without deleting their record.
     employee = employees_collection.find_one_and_update(
-        {"employee_id": employee_id},
+        query,
         {"$set": {"is_active": False}},
         projection={"_id": 0},
         return_document=ReturnDocument.AFTER,

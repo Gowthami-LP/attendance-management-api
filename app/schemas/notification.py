@@ -9,6 +9,7 @@ class NotificationResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     notification_id: str
+    tenant_id: str | None = None
     employee_id: str
     recipient_email: EmailStr
     week_start: str

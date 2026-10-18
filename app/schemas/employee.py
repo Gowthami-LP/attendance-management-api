@@ -40,6 +40,9 @@ class EmployeeResponse(BaseModel):
     # Indicates whether the employee is active
     is_active: bool = True
 
+    # Associated tenant ID
+    tenant_id: str | None = None
+
 
 # Restrict the optional active-status filter to supported values
 EmployeeStatus = Literal["active", "inactive"]

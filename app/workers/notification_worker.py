@@ -38,12 +38,19 @@ def _handle_shutdown(signum, frame):
     _keep_running = False
 
 
-def process_pending_notifications(batch_size: int = 50) -> dict[str, int]:
-    """Find and deliver notifications currently in pending state."""
+def process_pending_notifications(
+    batch_size: int = 50,
+    tenant_id: str | None = None,
+) -> dict[str, int]:
+    """Find and deliver notifications currently in pending state, safely resolving tenant context per job."""
+    query: dict[str, Any] = {"status": "pending"}
+    if tenant_id:
+        query["tenant_id"] = tenant_id
+
     records = list(
         notifications_collection.find(
-            {"status": "pending"},
-            {"_id": 0, "notification_id": 1, "created_at": 1},
+            query,
+            {"_id": 0, "notification_id": 1, "tenant_id": 1, "created_at": 1},
         )
         .sort("created_at", 1)
         .limit(batch_size)
@@ -54,6 +61,7 @@ def process_pending_notifications(batch_size: int = 50) -> dict[str, int]:
 
     for record in records:
         notification_id = record["notification_id"]
+        # Deliver notification: atomically claims job, validates tenant, and isolates employee data
         result = deliver_notification(notification_id)
         if result.get("status") == "sent":
             sent += 1
@@ -70,15 +78,20 @@ def process_pending_notifications(batch_size: int = 50) -> dict[str, int]:
 def retry_eligible_failed_notifications(
     max_attempts: int = 3,
     batch_size: int = 50,
+    tenant_id: str | None = None,
 ) -> dict[str, int]:
-    """Find and retry failed notifications that have not exceeded max_attempts."""
+    """Find and retry failed notifications that have not exceeded max_attempts, scoped by tenant if provided."""
+    query: dict[str, Any] = {
+        "status": "failed",
+        "attempts": {"$lt": max_attempts},
+    }
+    if tenant_id:
+        query["tenant_id"] = tenant_id
+
     records = list(
         notifications_collection.find(
-            {
-                "status": "failed",
-                "attempts": {"$lt": max_attempts},
-            },
-            {"_id": 0, "notification_id": 1, "created_at": 1},
+            query,
+            {"_id": 0, "notification_id": 1, "tenant_id": 1, "created_at": 1},
         )
         .sort("created_at", 1)
         .limit(batch_size)
@@ -102,13 +115,23 @@ def retry_eligible_failed_notifications(
     }
 
 
-def run_worker_cycle(max_attempts: int = 3, batch_size: int = 50) -> dict[str, Any]:
+def run_worker_cycle(
+    max_attempts: int = 3,
+    batch_size: int = 50,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
     """Execute one processing cycle: drain pending notifications then retry eligible failed."""
-    pending_stats = process_pending_notifications(batch_size=batch_size)
+    pending_stats = process_pending_notifications(
+        batch_size=batch_size,
+        tenant_id=tenant_id,
+    )
+
     retry_stats = retry_eligible_failed_notifications(
         max_attempts=max_attempts,
         batch_size=batch_size,
+        tenant_id=tenant_id,
     )
+
     return {
         "pending": pending_stats,
         "retried": retry_stats,
@@ -119,15 +142,17 @@ def start_worker_daemon(
     interval_seconds: int = 60,
     max_attempts: int = 3,
     batch_size: int = 50,
+    tenant_id: str | None = None,
 ) -> None:
     """Run the worker continuously in background polling mode with graceful shutdown."""
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
 
     logger.info(
-        "Notification worker daemon started. Polling every %d seconds (max_attempts=%d)...",
+        "Notification worker daemon started. Polling every %d seconds (max_attempts=%d, tenant=%s)...",
         interval_seconds,
         max_attempts,
+        tenant_id or "all",
     )
 
     create_notification_indexes()
@@ -137,6 +162,7 @@ def start_worker_daemon(
             stats = run_worker_cycle(
                 max_attempts=max_attempts,
                 batch_size=batch_size,
+                tenant_id=tenant_id,
             )
             processed_total = (
                 stats["pending"]["processed"] + stats["retried"]["retried"]
@@ -188,6 +214,12 @@ def main():
         help="Number of records to process per batch (default: 50)",
     )
     parser.add_argument(
+        "--tenant-id",
+        type=str,
+        default=None,
+        help="Process notifications only for a specific tenant (default: all)",
+    )
+    parser.add_argument(
         "--process-weekly",
         action="store_true",
         help="Trigger compliance evaluation and create notification records for the previous completed week",
@@ -213,6 +245,7 @@ def main():
         stats = retry_eligible_failed_notifications(
             max_attempts=args.max_attempts,
             batch_size=args.batch_size,
+            tenant_id=args.tenant_id,
         )
         logger.info("Retry results: %s", stats)
         return
@@ -222,6 +255,7 @@ def main():
             interval_seconds=args.interval,
             max_attempts=args.max_attempts,
             batch_size=args.batch_size,
+            tenant_id=args.tenant_id,
         )
         return
 
@@ -230,6 +264,7 @@ def main():
     stats = run_worker_cycle(
         max_attempts=args.max_attempts,
         batch_size=args.batch_size,
+        tenant_id=args.tenant_id,
     )
     logger.info("Worker cycle results: %s", stats)
 

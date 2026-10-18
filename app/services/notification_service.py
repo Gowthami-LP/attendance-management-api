@@ -11,9 +11,16 @@ from pymongo.errors import DuplicateKeyError
 from app.database.mongodb import (
     employees_collection,
     notifications_collection,
+    tenants_collection,
 )
 from app.services.attendance_service import OFFICE_TIMEZONE
 from app.services.compliance_service import evaluate_weekly_compliance
+
+
+def _tenant_filter(tenant_id: str) -> dict[str, Any] | str:
+    if tenant_id == "default":
+        return {"$in": ["default", None]}
+    return tenant_id
 
 
 def send_notification_email(
@@ -44,9 +51,16 @@ def send_notification_email(
         server.send_message(message)
 
 
-def deliver_notification(notification_id: str) -> dict[str, str]:
+def deliver_notification(
+    notification_id: str,
+    tenant_id: str | None = None,
+) -> dict[str, str]:
+    query: dict[str, Any] = {"notification_id": notification_id}
+    if tenant_id:
+        query["tenant_id"] = _tenant_filter(tenant_id)
+
     notification = notifications_collection.find_one(
-        {"notification_id": notification_id},
+        query,
         {"_id": 0},
     )
 
@@ -69,11 +83,16 @@ def deliver_notification(notification_id: str) -> dict[str, str]:
             "status": notification["status"],
         }
 
+    # Atomically claim the notification job
+    claim_query: dict[str, Any] = {
+        "notification_id": notification_id,
+        "status": {"$in": ["pending", "failed"]},
+    }
+    if tenant_id:
+        claim_query["tenant_id"] = _tenant_filter(tenant_id)
+
     claimed_notification = notifications_collection.find_one_and_update(
-        {
-            "notification_id": notification_id,
-            "status": {"$in": ["pending", "failed"]},
-        },
+        claim_query,
         {
             "$set": {
                 "status": "sending",
@@ -100,9 +119,50 @@ def deliver_notification(notification_id: str) -> dict[str, str]:
             "status": current_notification["status"],
         }
 
+    job_tenant_id = claimed_notification.get("tenant_id")
+
+    # Validate tenant if job is tenant-scoped
+    if job_tenant_id and job_tenant_id != "default":
+        tenant = tenants_collection.find_one(
+            {
+                "$or": [{"id": job_tenant_id}, {"_id": job_tenant_id}],
+            }
+        )
+        if tenant is None or tenant.get("status") != "active":
+            tenant_status = tenant.get("status") if tenant else "missing"
+            error_msg = f"Tenant {job_tenant_id} is {tenant_status}"
+            notifications_collection.update_one(
+                {"notification_id": notification_id},
+                {
+                    "$set": {
+                        "status": "failed",
+                        "last_error": error_msg,
+                    }
+                },
+            )
+            return {
+                "notification_id": notification_id,
+                "status": "failed",
+                "message": error_msg,
+            }
+
+    # Load employee within the specific tenant to ensure latest recipient email
+    recipient_email = claimed_notification["recipient_email"]
+    emp_id = claimed_notification.get("employee_id")
+    if job_tenant_id and emp_id:
+        employee = employees_collection.find_one(
+            {
+                "tenant_id": _tenant_filter(job_tenant_id),
+                "employee_id": emp_id,
+            },
+            {"_id": 0, "email": 1, "is_active": 1},
+        )
+        if employee and employee.get("email"):
+            recipient_email = employee["email"]
+
     try:
         send_notification_email(
-            recipient=claimed_notification["recipient_email"],
+            recipient=recipient_email,
             subject=claimed_notification["subject"],
             body=claimed_notification["body"],
         )
@@ -145,8 +205,11 @@ def deliver_notification(notification_id: str) -> dict[str, str]:
     }
 
 
-def process_weekly_violations(week_start: date) -> dict[str, Any]:
-    report = evaluate_weekly_compliance(week_start)
+def process_weekly_violations(
+    week_start: date,
+    tenant_id: str = "default",
+) -> dict[str, Any]:
+    report = evaluate_weekly_compliance(week_start, tenant_id=tenant_id)
 
     if report.evaluation_status != "completed":
         raise ValueError("Notifications can only be processed for a completed week.")
@@ -156,12 +219,27 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
     failed = 0
     skipped = 0
 
+    tenant = (
+        tenants_collection.find_one(
+            {"$or": [{"id": tenant_id}, {"_id": tenant_id}]},
+            {"_id": 0, "policy": 1},
+        )
+        if tenant_id != "default"
+        else None
+    )
+    policy = (tenant or {}).get("policy") or {}
+    min_qualifying_days = int(policy.get("min_qualifying_days", 3))
+    min_weekly_hours = float(policy.get("min_weekly_hours", 15))
+
     for employee_result in report.employees:
         if employee_result.compliance_status != "violation":
             continue
 
         employee = employees_collection.find_one(
-            {"employee_id": employee_result.employee_id},
+            {
+                "tenant_id": _tenant_filter(tenant_id),
+                "employee_id": employee_result.employee_id,
+            },
             {"_id": 0, "email": 1},
         )
 
@@ -176,9 +254,9 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
             "the office attendance policy for the following week:\n\n"
             f"Week: {report.week_start} to {report.week_end}\n"
             f"Qualifying office days: {employee_result.qualifying_days} "
-            "(minimum required: 3)\n"
+            f"(minimum required: {min_qualifying_days})\n"
             f"Completed working hours: {employee_result.total_hours} "
-            "(minimum required: 15)\n\n"
+            f"(minimum required: {min_weekly_hours:g})\n\n"
             f"Reason: {employee_result.reason}\n\n"
             "Please contact your manager or HR team if you believe "
             "these records are incorrect.\n\n"
@@ -187,7 +265,9 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
 
         notification_id = str(uuid4())
         notification_document = {
+            "_id": notification_id,
             "notification_id": notification_id,
+            "tenant_id": tenant_id,
             "employee_id": employee_result.employee_id,
             "recipient_email": employee["email"],
             "week_start": report.week_start,
@@ -196,6 +276,7 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
             "body": body,
             "status": "pending",
             "attempts": 0,
+            "max_attempts": 3,
             "created_at": datetime.now(OFFICE_TIMEZONE).isoformat(),
             "sent_at": None,
             "last_error": None,
@@ -208,7 +289,7 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
             skipped += 1
             continue
 
-        delivery_result = deliver_notification(notification_id)
+        delivery_result = deliver_notification(notification_id, tenant_id=tenant_id)
         if delivery_result["status"] == "sent":
             sent += 1
         else:
@@ -224,10 +305,17 @@ def process_weekly_violations(week_start: date) -> dict[str, Any]:
     }
 
 
-def retry_failed_notification(notification_id: str) -> dict[str, str]:
+def retry_failed_notification(
+    notification_id: str,
+    tenant_id: str | None = None,
+) -> dict[str, str]:
+    query: dict[str, Any] = {"notification_id": notification_id}
+    if tenant_id:
+        query["tenant_id"] = _tenant_filter(tenant_id)
+
     notification = notifications_collection.find_one(
-        {"notification_id": notification_id},
-        {"_id": 0, "status": 1},
+        query,
+        {"_id": 0, "status": 1, "attempts": 1, "max_attempts": 1},
     )
 
     if notification is None:
@@ -250,4 +338,11 @@ def retry_failed_notification(notification_id: str) -> dict[str, str]:
             "message": "Only failed notifications can be retried.",
         }
 
-    return deliver_notification(notification_id)
+    if notification.get("attempts", 0) >= notification.get("max_attempts", 3):
+        return {
+            "notification_id": notification_id,
+            "status": "failed",
+            "message": "The notification retry limit has been reached.",
+        }
+
+    return deliver_notification(notification_id, tenant_id=tenant_id)

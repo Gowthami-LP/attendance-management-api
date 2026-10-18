@@ -75,12 +75,20 @@ def test_run_worker_cycle(monkeypatch):
     monkeypatch.setattr(
         notification_worker,
         "process_pending_notifications",
-        lambda batch_size: {"processed": 2, "sent": 2, "failed": 0},
+        lambda batch_size, tenant_id=None: {
+            "processed": 2,
+            "sent": 2,
+            "failed": 0,
+        },
     )
     monkeypatch.setattr(
         notification_worker,
         "retry_eligible_failed_notifications",
-        lambda max_attempts, batch_size: {"retried": 1, "sent": 1, "failed": 0},
+        lambda max_attempts, batch_size, tenant_id=None: {
+            "retried": 1,
+            "sent": 1,
+            "failed": 0,
+        },
     )
 
     cycle_stats = notification_worker.run_worker_cycle()
