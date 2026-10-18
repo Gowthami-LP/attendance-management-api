@@ -4,15 +4,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.database.mongodb import notifications_collection
-from app.routers.auth import get_current_admin
 from app.schemas.notification import (
     NotificationResponse,
     NotificationRetryResponse,
     NotificationStatus,
     NotificationTriggerResponse,
 )
+from app.security.tenant_context import TenantContext, get_current_tenant
 from app.services.attendance_service import OFFICE_TIMEZONE
 from app.services.notification_service import (
+    _tenant_filter,
     process_weekly_violations,
     retry_failed_notification,
 )
@@ -20,7 +21,6 @@ from app.services.notification_service import (
 router = APIRouter(
     prefix="/api/v1/notifications",
     tags=["Notifications"],
-    dependencies=[Depends(get_current_admin)],
 )
 
 
@@ -29,6 +29,7 @@ router = APIRouter(
     response_model=NotificationTriggerResponse,
 )
 def trigger_weekly_notifications(
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
     week_start: Annotated[date | None, Query()] = None,
 ) -> NotificationTriggerResponse:
     today = datetime.now(OFFICE_TIMEZONE).date()
@@ -49,7 +50,7 @@ def trigger_weekly_notifications(
         )
 
     try:
-        result = process_weekly_violations(selected_week)
+        result = process_weekly_violations(selected_week, tenant_id=tenant.id)
         return NotificationTriggerResponse(**result)
     except ValueError as error:
         raise HTTPException(
@@ -63,12 +64,15 @@ def trigger_weekly_notifications(
     response_model=list[NotificationResponse],
 )
 def list_notifications(
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
     notification_status: Annotated[
         NotificationStatus | None,
         Query(alias="status"),
     ] = None,
 ) -> list[NotificationResponse]:
-    query: dict[str, str] = {}
+    query: dict[str, object] = {
+        "tenant_id": _tenant_filter(tenant.id),
+    }
     if notification_status is not None:
         query["status"] = notification_status
 
@@ -84,8 +88,11 @@ def list_notifications(
     "/{notification_id}/retry",
     response_model=NotificationRetryResponse,
 )
-def retry_notification(notification_id: str) -> NotificationRetryResponse:
-    result = retry_failed_notification(notification_id)
+def retry_notification(
+    notification_id: str,
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
+) -> NotificationRetryResponse:
+    result = retry_failed_notification(notification_id, tenant_id=tenant.id)
 
     if result["status"] == "not_found":
         raise HTTPException(

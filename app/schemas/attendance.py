@@ -19,3 +19,4 @@ class AttendanceResponse(BaseModel):
     entry_time: str
     exit_time: str | None = None
     duration_minutes: int | None = None
+    tenant_id: str | None = None

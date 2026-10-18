@@ -3,7 +3,11 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from app.database.mongodb import attendance_collection, employees_collection
+from app.database.mongodb import (
+    attendance_collection,
+    employees_collection,
+    tenants_collection,
+)
 from app.schemas.compliance import (
     EmployeeCompliance,
     WeeklyComplianceResponse,
@@ -15,8 +19,16 @@ MIN_HOURS_PER_DAY = 5
 MIN_WEEKLY_HOURS = 15
 
 
+def _tenant_filter(tenant_id: str) -> dict[str, Any] | str:
+    if tenant_id == "default":
+        return {"$in": ["default", None]}
+    return tenant_id
+
+
 def evaluate_weekly_compliance(
     week_start: date | None = None,
+    tenant_id: str = "default",
+    policy: dict[str, Any] | None = None,
 ) -> WeeklyComplianceResponse:
     today = datetime.now(OFFICE_TIMEZONE).date()
 
@@ -40,9 +52,31 @@ def evaluate_weekly_compliance(
     week_is_complete = today > week_end
     evaluation_status = "completed" if week_is_complete else "in_progress"
 
+    # Load tenant policy configuration if not provided
+    if policy is None and tenant_id != "default":
+        tenant = tenants_collection.find_one(
+            {"$or": [{"id": tenant_id}, {"_id": tenant_id}]}
+        )
+        if tenant and tenant.get("policy"):
+            policy = tenant["policy"]
+
+    configured_policy = policy or {}
+    min_qualifying_days = int(
+        configured_policy.get("min_qualifying_days", MIN_QUALIFYING_DAYS)
+    )
+    min_hours_per_day = float(
+        configured_policy.get("min_hours_per_day", MIN_HOURS_PER_DAY)
+    )
+    min_weekly_hours = float(
+        configured_policy.get("min_weekly_hours", MIN_WEEKLY_HOURS)
+    )
+
     employees = list(
         employees_collection.find(
-            {"is_active": True},
+            {
+                "tenant_id": _tenant_filter(tenant_id),
+                "is_active": True,
+            },
             {
                 "_id": 0,
                 "employee_id": 1,
@@ -55,10 +89,11 @@ def evaluate_weekly_compliance(
     attendance_records = list(
         attendance_collection.find(
             {
+                "tenant_id": _tenant_filter(tenant_id),
                 "date": {
                     "$gte": week_start.isoformat(),
                     "$lte": min(week_end, today).isoformat(),
-                }
+                },
             },
             {"_id": 0},
         )
@@ -104,12 +139,12 @@ def evaluate_weekly_compliance(
                 continue
 
             total_minutes += duration_minutes
-            if duration_minutes >= MIN_HOURS_PER_DAY * 60:
+            if duration_minutes >= min_hours_per_day * 60:
                 qualifying_days += 1
 
         total_hours = round(total_minutes / 60, 2)
         hours_shortfall = round(
-            max(0, MIN_WEEKLY_HOURS - total_hours),
+            max(0, min_weekly_hours - total_hours),
             2,
         )
 
@@ -125,8 +160,8 @@ def evaluate_weekly_compliance(
             )
             needs_review_count += 1
         elif (
-            qualifying_days >= MIN_QUALIFYING_DAYS
-            and total_minutes >= MIN_WEEKLY_HOURS * 60
+            qualifying_days >= min_qualifying_days
+            and total_minutes >= min_weekly_hours * 60
         ):
             compliance_status = "compliant"
             reason = (
@@ -138,14 +173,14 @@ def evaluate_weekly_compliance(
             compliance_status = "violation"
             reasons = []
 
-            if qualifying_days < MIN_QUALIFYING_DAYS:
+            if qualifying_days < min_qualifying_days:
                 reasons.append(
                     f"Only {qualifying_days} qualifying days; "
-                    f"{MIN_QUALIFYING_DAYS} required"
+                    f"{min_qualifying_days} required"
                 )
 
-            if total_minutes < MIN_WEEKLY_HOURS * 60:
-                reasons.append(f"Only {total_hours} hours; {MIN_WEEKLY_HOURS} required")
+            if total_minutes < min_weekly_hours * 60:
+                reasons.append(f"Only {total_hours} hours; {min_weekly_hours} required")
 
             reason = "; ".join(reasons)
             violating_count += 1

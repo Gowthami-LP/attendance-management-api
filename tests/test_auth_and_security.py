@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app import main
 from app.routers import auth
-from app.security.auth_utils import hash_password
+from app.security.auth_utils import create_access_token, hash_password
 from app.services import auth_service
 
 
@@ -27,6 +27,7 @@ def _setup_security_mocks(monkeypatch, fake_collection):
 
     monkeypatch.setattr(main, "client", FakeClient())
     monkeypatch.setattr(main, "create_database_indexes", lambda: None)
+    monkeypatch.setattr(main, "create_tenant_indexes", lambda: None)
     monkeypatch.setattr(main, "create_admin_indexes", lambda: None)
     monkeypatch.setattr(main, "create_attendance_indexes", lambda: None)
     monkeypatch.setattr(main, "create_notification_indexes", lambda: None)
@@ -86,3 +87,25 @@ def test_invalid_or_expired_jwt_rejected(monkeypatch, fake_collection):
             headers={"Authorization": "Bearer not-a-valid-jwt-token"},
         )
         assert response.status_code == 401
+
+
+def test_inactive_admin_cannot_login_or_reuse_an_existing_token(
+    monkeypatch,
+    fake_collection,
+):
+    admins = _setup_security_mocks(monkeypatch, fake_collection)
+    existing_token = create_access_token("admin@example.com")
+    admins.documents[0]["is_active"] = False
+
+    with TestClient(main.app) as client:
+        login_response = client.post(
+            "/api/v1/auth/admin/login",
+            json={"email": "admin@example.com", "password": "ValidPassword123"},
+        )
+        assert login_response.status_code == 401
+
+        protected_response = client.get(
+            "/api/v1/auth/admin/me",
+            headers={"Authorization": f"Bearer {existing_token}"},
+        )
+        assert protected_response.status_code == 401

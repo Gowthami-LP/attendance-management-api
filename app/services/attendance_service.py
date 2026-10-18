@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
@@ -12,9 +13,21 @@ from app.schemas.attendance import AttendanceResponse
 OFFICE_TIMEZONE = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata"))
 
 
-def check_in(employee_id: str) -> AttendanceResponse:
+def _tenant_filter(tenant_id: str) -> dict[str, Any] | str:
+    if tenant_id == "default":
+        return {"$in": ["default", None]}
+    return tenant_id
+
+
+def check_in(
+    employee_id: str,
+    tenant_id: str = "default",
+) -> AttendanceResponse:
     employee = employees_collection.find_one(
-        {"employee_id": employee_id},
+        {
+            "tenant_id": _tenant_filter(tenant_id),
+            "employee_id": employee_id,
+        },
         {"_id": 0},
     )
 
@@ -33,6 +46,7 @@ def check_in(employee_id: str) -> AttendanceResponse:
     current_time = datetime.now(OFFICE_TIMEZONE)
     local_date = current_time.date().isoformat()
     attendance_document = {
+        "tenant_id": tenant_id,
         "employee_id": employee_id,
         "date": local_date,
         "entry_time": current_time.isoformat(),
@@ -51,10 +65,14 @@ def check_in(employee_id: str) -> AttendanceResponse:
     return AttendanceResponse(**attendance_document)
 
 
-def check_out(employee_id: str) -> AttendanceResponse:
+def check_out(
+    employee_id: str,
+    tenant_id: str = "default",
+) -> AttendanceResponse:
     current_time = datetime.now(OFFICE_TIMEZONE)
     local_date = current_time.date().isoformat()
-    attendance_filter = {
+    attendance_filter: dict[str, Any] = {
+        "tenant_id": _tenant_filter(tenant_id),
         "employee_id": employee_id,
         "date": local_date,
     }
@@ -102,9 +120,13 @@ def check_out(employee_id: str) -> AttendanceResponse:
 
 def get_employee_attendance(
     employee_id: str,
+    tenant_id: str = "default",
 ) -> list[AttendanceResponse]:
     employee = employees_collection.find_one(
-        {"employee_id": employee_id},
+        {
+            "tenant_id": _tenant_filter(tenant_id),
+            "employee_id": employee_id,
+        },
         {"_id": 0, "employee_id": 1},
     )
 
@@ -115,7 +137,10 @@ def get_employee_attendance(
         )
 
     records = attendance_collection.find(
-        {"employee_id": employee_id},
+        {
+            "tenant_id": _tenant_filter(tenant_id),
+            "employee_id": employee_id,
+        },
         {"_id": 0},
     ).sort("date", -1)
 

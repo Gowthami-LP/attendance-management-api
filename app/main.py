@@ -1,4 +1,5 @@
 # Import asynccontextmanager to manage application startup and shutdown
+import logging
 from contextlib import asynccontextmanager
 
 # Import FastAPI
@@ -12,7 +13,9 @@ from app.database.mongodb import (
     create_attendance_indexes,
     create_database_indexes,
     create_notification_indexes,
+    create_tenant_indexes,
 )
+from app.database.redis_client import check_redis_connection, close_redis_connection
 from app.middleware.logging_middleware import StructuredLoggingMiddleware
 
 # Import the application routers
@@ -20,9 +23,13 @@ from app.routers.attendance import router as attendance_router
 from app.routers.auth import router as auth_router
 from app.routers.compliance import router as compliance_router
 from app.routers.employees import router as employee_router
+from app.routers.health import router as health_router
 from app.routers.notifications import router as notifications_router
 from app.routers.reports import router as reports_router
+from app.routers.tenants import router as tenants_router
 from app.services.scheduler_service import start_scheduler, stop_scheduler
+
+logger = logging.getLogger(__name__)
 
 
 # Define startup and shutdown operations
@@ -34,6 +41,9 @@ async def lifespan(app: FastAPI):
 
         # Create unique indexes for employee records
         create_database_indexes()
+
+        # Create tenant and membership indexes
+        create_tenant_indexes()
 
         # Create the admin account index
         create_admin_indexes()
@@ -47,6 +57,15 @@ async def lifespan(app: FastAPI):
         # Start the weekly notification scheduler
         start_scheduler()
 
+        # Redis is an optional cache; keep the API available if it is down.
+        try:
+            app.state.redis_available = await check_redis_connection()
+        except Exception:
+            app.state.redis_available = False
+            logger.warning(
+                "Redis is unavailable; continuing without cache", exc_info=True
+            )
+
         # Allow FastAPI to serve requests
         yield
     finally:
@@ -55,6 +74,9 @@ async def lifespan(app: FastAPI):
 
         # Close the MongoDB connection when the application shuts down
         client.close()
+
+        # Release the asynchronous Redis client during application shutdown.
+        await close_redis_connection()
 
 
 # Create the FastAPI application instance
@@ -85,6 +107,12 @@ app.include_router(compliance_router)
 
 # Register notification endpoints
 app.include_router(notifications_router)
+
+# Register tenant registry endpoints
+app.include_router(tenants_router)
+
+# Register dependency health endpoints
+app.include_router(health_router)
 
 
 # Define the root endpoint

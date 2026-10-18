@@ -20,6 +20,7 @@ def _setup_main_mocks(monkeypatch, ping_raises=None):
 
     monkeypatch.setattr(main, "client", FakeClient())
     monkeypatch.setattr(main, "create_database_indexes", lambda: None)
+    monkeypatch.setattr(main, "create_tenant_indexes", lambda: None)
     monkeypatch.setattr(main, "create_admin_indexes", lambda: None)
     monkeypatch.setattr(main, "create_attendance_indexes", lambda: None)
     monkeypatch.setattr(main, "create_notification_indexes", lambda: None)

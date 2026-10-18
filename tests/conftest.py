@@ -69,6 +69,15 @@ class FakeCollection:
         return actual == expected
 
     def _matches(self, document: dict[str, Any], query: dict[str, Any]) -> bool:
+        if "$or" in query:
+            return any(
+                all(
+                    field == "$options"
+                    or self._matches_value(document.get(field), expected)
+                    for field, expected in branch.items()
+                )
+                for branch in query["$or"]
+            )
         for field, expected in query.items():
             if field == "$options":
                 continue
@@ -118,14 +127,24 @@ class FakeCollection:
 
     def insert_one(self, document: dict[str, Any]) -> None:
         for field in self.unique_fields:
-            if any(
-                existing.get(field) == document.get(field)
-                for existing in self.documents
-            ):
-                raise DuplicateKeyError(
-                    "duplicate key",
-                    details={"keyPattern": {field: 1}},
-                )
+            if isinstance(field, tuple):
+                if any(
+                    all(existing.get(f) == document.get(f) for f in field)
+                    for existing in self.documents
+                ):
+                    raise DuplicateKeyError(
+                        "duplicate key",
+                        details={"keyPattern": {f: 1 for f in field}},
+                    )
+            else:
+                if any(
+                    existing.get(field) == document.get(field)
+                    for existing in self.documents
+                ):
+                    raise DuplicateKeyError(
+                        "duplicate key",
+                        details={"keyPattern": {field: 1}},
+                    )
         self.documents.append(deepcopy(document))
 
     def find_one_and_update(

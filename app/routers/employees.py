@@ -3,13 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi import status as http_status
 
-from app.routers.auth import get_current_admin
 from app.schemas.employee import (
     EmployeeCreate,
     EmployeeResponse,
     EmployeeStatus,
     EmployeeUpdate,
 )
+from app.security.tenant_context import TenantContext, get_current_tenant
 from app.services.employee_service import (
     create_employee,
     deactivate_employee,
@@ -25,16 +25,20 @@ router = APIRouter(prefix="/employees", tags=["employees"])
     "",
     response_model=EmployeeResponse,
     status_code=http_status.HTTP_201_CREATED,
-    dependencies=[Depends(get_current_admin)],
 )
-def create_employee_endpoint(employee: EmployeeCreate) -> EmployeeResponse:
-    return create_employee(employee)
+def create_employee_endpoint(
+    employee: EmployeeCreate,
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
+) -> EmployeeResponse:
+    return create_employee(employee, tenant_id=tenant.id)
 
 
 @router.get(
-    "", response_model=list[EmployeeResponse], dependencies=[Depends(get_current_admin)]
+    "",
+    response_model=list[EmployeeResponse],
 )
 def list_employees(
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
     department: str | None = None,
     employee_status: Annotated[
         EmployeeStatus | None,
@@ -42,37 +46,43 @@ def list_employees(
     ] = None,
 ) -> list[EmployeeResponse]:
     is_active = None if employee_status is None else employee_status == "active"
-    return get_employees(department=department, is_active=is_active)
+    return get_employees(
+        department=department, is_active=is_active, tenant_id=tenant.id
+    )
 
 
-# Retrieve one employee by employee ID.
+# Retrieve one employee by employee ID within the tenant.
 @router.get(
     "/{employee_id}",
     response_model=EmployeeResponse,
-    dependencies=[Depends(get_current_admin)],
 )
-def read_employee(employee_id: str) -> EmployeeResponse:
-    return get_employee_by_id(employee_id)
+def read_employee(
+    employee_id: str,
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
+) -> EmployeeResponse:
+    return get_employee_by_id(employee_id, tenant_id=tenant.id)
 
 
-# Update only the supplied employee fields.
+# Update only the supplied employee fields within the tenant.
 @router.patch(
     "/{employee_id}",
     response_model=EmployeeResponse,
-    dependencies=[Depends(get_current_admin)],
 )
 def edit_employee(
     employee_id: str,
     employee: EmployeeUpdate,
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
 ) -> EmployeeResponse:
-    return update_employee(employee_id, employee)
+    return update_employee(employee_id, employee, tenant_id=tenant.id)
 
 
-# Deactivate an employee while preserving their history.
+# Deactivate a tenant-owned employee while preserving their history.
 @router.patch(
     "/{employee_id}/deactivate",
     response_model=EmployeeResponse,
-    dependencies=[Depends(get_current_admin)],
 )
-def disable_employee(employee_id: str) -> EmployeeResponse:
-    return deactivate_employee(employee_id)
+def disable_employee(
+    employee_id: str,
+    tenant: Annotated[TenantContext, Depends(get_current_tenant)],
+) -> EmployeeResponse:
+    return deactivate_employee(employee_id, tenant_id=tenant.id)

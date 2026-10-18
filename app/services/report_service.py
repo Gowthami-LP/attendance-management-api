@@ -1,5 +1,6 @@
 import calendar
 from datetime import date, datetime, timedelta
+from typing import Any
 
 from fastapi import HTTPException, status
 
@@ -10,6 +11,12 @@ from app.schemas.report import (
     AttendanceReportSummary,
 )
 from app.services.attendance_service import OFFICE_TIMEZONE
+
+
+def _tenant_filter(tenant_id: str) -> dict[str, Any] | str:
+    if tenant_id == "default":
+        return {"$in": ["default", None]}
+    return tenant_id
 
 
 def calculate_report_dates(
@@ -61,6 +68,7 @@ def generate_attendance_report(
     reference_date: date | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    tenant_id: str = "default",
 ) -> AttendanceReportResponse:
     report_start, report_end = calculate_report_dates(
         period,
@@ -77,7 +85,7 @@ def generate_attendance_report(
 
     employee_documents = list(
         employees_collection.find(
-            {},
+            {"tenant_id": _tenant_filter(tenant_id)},
             {
                 "_id": 0,
                 "employee_id": 1,
@@ -92,10 +100,11 @@ def generate_attendance_report(
         attendance_documents = list(
             attendance_collection.find(
                 {
+                    "tenant_id": _tenant_filter(tenant_id),
                     "date": {
                         "$gte": report_start.isoformat(),
                         "$lte": effective_end.isoformat(),
-                    }
+                    },
                 },
                 {"_id": 0},
             )

@@ -85,7 +85,9 @@ def test_duplicate_weekly_notification_is_skipped(
     monkeypatch.setattr(notification_service, "employees_collection", employees)
     monkeypatch.setattr(notification_service, "notifications_collection", notifications)
     monkeypatch.setattr(
-        notification_service, "evaluate_weekly_compliance", lambda week: report
+        notification_service,
+        "evaluate_weekly_compliance",
+        lambda week, tenant_id="default": report,
     )
     monkeypatch.setattr(
         notification_service, "send_notification_email", lambda **kwargs: None
