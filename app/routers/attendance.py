@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 from starlette.concurrency import run_in_threadpool
 
 from app.database.redis_client import redis_client
@@ -155,7 +156,20 @@ async def _run_idempotent_attendance_operation(
         }
     )
     scoped_key = f"attendance:{operation}:{key_hash}"
-    claim = await claim_request(redis_client, scoped_key, fingerprint)
+    try:
+        claim = await claim_request(redis_client, scoped_key, fingerprint)
+    except RedisError:
+        logging.getLogger(__name__).warning(
+            "Redis is unavailable; using persisted attendance idempotency",
+            exc_info=True,
+        )
+        return await run_in_threadpool(
+            service,
+            request.employee_id,
+            tenant_id=tenant.id,
+            idempotency_key_hash=key_hash,
+            request_fingerprint=fingerprint,
+        )
 
     if claim["status"] == "completed":
         return JSONResponse(
