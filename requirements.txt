@@ -6,6 +6,7 @@ argon2-cffi==25.1.0
 argon2-cffi-bindings==26.1.0
 cffi==2.1.1
 click==8.5.0
+celery==5.6.3
 dnspython==2.9.0
 email-validator==2.3.0
 fastapi==0.143.0
@@ -13,6 +14,7 @@ h11==0.16.0
 httptools==0.8.0
 idna==3.20
 opentelemetry-api==1.45.1
+openpyxl==3.1.5
 pwdlib==0.3.1
 pycparser==3.11
 pydantic==2.14.0
@@ -21,6 +23,9 @@ PyJWT==2.15.1
 pymongo==4.18.3
 python-dotenv==1.2.4
 PyYAML==6.0.3
+python-multipart==0.0.31
+prometheus-client==0.26.0
+prometheus-fastapi-instrumentator==8.1.0
 redis==8.1.0
 starlette==1.7.0
 typing-inspection==0.4.4
@@ -33,7 +38,6 @@ websockets==17.2
 
 # Local validation and development tools
 pytest
-httpx
 httpx2
 ruff
 bandit

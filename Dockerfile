@@ -23,14 +23,17 @@ COPY app/ ./app/
 COPY scripts/ ./scripts/
 
 # Run the API as an unprivileged user
-RUN addgroup --system app && adduser --system --ingroup app app
+RUN addgroup --system app \
+    && adduser --system --ingroup app app \
+    && mkdir -p /tmp/employee-imports \
+    && chown app:app /tmp/employee-imports
 USER app
 
 # Document the port used by the FastAPI application
 EXPOSE 8000
 
 # Check that the API health endpoint is responding
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
 
 # Start FastAPI using one Uvicorn worker

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 # Import FastAPI
 from fastapi import FastAPI, Response, status
+from prometheus_fastapi_instrumentator import Instrumentator
 from pymongo.errors import PyMongoError
 
 # Import the MongoDB client and index setup functions
@@ -22,6 +23,7 @@ from app.middleware.logging_middleware import StructuredLoggingMiddleware
 from app.routers.attendance import router as attendance_router
 from app.routers.auth import router as auth_router
 from app.routers.compliance import router as compliance_router
+from app.routers.employee_imports import router as employee_import_router
 from app.routers.employees import router as employee_router
 from app.routers.health import router as health_router
 from app.routers.notifications import router as notifications_router
@@ -96,6 +98,9 @@ app.include_router(auth_router)
 # Register employee endpoints
 app.include_router(employee_router)
 
+# Register employee-import endpoints
+app.include_router(employee_import_router)
+
 # Register attendance endpoints
 app.include_router(attendance_router)
 
@@ -113,6 +118,13 @@ app.include_router(tenants_router)
 
 # Register dependency health endpoints
 app.include_router(health_router)
+
+# Expose HTTP request metrics for Prometheus without adding the endpoint to Swagger.
+Instrumentator().instrument(app).expose(
+    app,
+    endpoint="/metrics",
+    include_in_schema=False,
+)
 
 
 # Define the root endpoint

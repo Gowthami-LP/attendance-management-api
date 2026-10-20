@@ -43,6 +43,17 @@ def test_health_endpoint_returns_expected_response(monkeypatch):
     assert "x-request-id" in response.headers
 
 
+def test_metrics_endpoint_exposes_prometheus_metrics(monkeypatch):
+    _setup_main_mocks(monkeypatch)
+
+    with TestClient(main.app) as client:
+        client.get("/health")
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "http_requests_total" in response.text
+
+
 def test_health_live_endpoint(monkeypatch):
     _setup_main_mocks(monkeypatch)
 

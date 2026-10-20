@@ -19,13 +19,14 @@ bearer_scheme = HTTPBearer(auto_error=False)
     response_model=AdminLoginResponse,
     summary="Log in, optionally scoped to a tenant",
     description=(
-        "Provide tenant_id to receive a token scoped to that tenant. "
-        "The account must have an active membership in the requested tenant."
+        "Log in with email and password, optionally providing tenant_id to scope "
+        "the token. A tenant_id and password may be used without email when the "
+        "tenant has exactly one active administrator."
     ),
 )
 def admin_login(request: AdminLoginRequest):
     return login_admin(
-        request.email.lower(),
+        request.email.lower() if request.email else None,
         request.password,
         tenant_id=request.tenant_id,
     )

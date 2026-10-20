@@ -2,7 +2,6 @@ name: Attendance API CI
 
 on:
   push:
-    branches: [master, main]
   pull_request:
     branches: [master, main]
 
@@ -76,3 +75,4 @@ jobs:
           format: "table"
           severity: "CRITICAL"
           exit-code: "0"
+

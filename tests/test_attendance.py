@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 
+from app.routers.attendance import router as attendance_router
 from app.services import attendance_service
 
 
@@ -73,8 +74,101 @@ def test_check_in_rejects_inactive_employee(attendance_db):
     assert error.value.status_code == 409
 
 
+def test_check_in_recovers_same_idempotent_request(attendance_db):
+    _, records = attendance_db
+
+    first = attendance_service.check_in(
+        "EMP001",
+        idempotency_key_hash="key-hash",
+        request_fingerprint="request-fingerprint",
+    )
+    recovered = attendance_service.check_in(
+        "EMP001",
+        idempotency_key_hash="key-hash",
+        request_fingerprint="request-fingerprint",
+    )
+
+    assert recovered == first
+    assert len(records.documents) == 1
+
+
+def test_check_in_rejects_reused_key_with_different_payload(attendance_db):
+    attendance_service.check_in(
+        "EMP001",
+        idempotency_key_hash="key-hash",
+        request_fingerprint="original-fingerprint",
+    )
+
+    with pytest.raises(HTTPException) as error:
+        attendance_service.check_in(
+            "EMP001",
+            idempotency_key_hash="key-hash",
+            request_fingerprint="different-fingerprint",
+        )
+
+    assert error.value.status_code == 422
+
+
+def test_check_out_recovers_same_idempotent_request(attendance_db, fixed_datetime):
+    _, records = attendance_db
+    attendance_service.check_in("EMP001")
+
+    first = attendance_service.check_out(
+        "EMP001",
+        idempotency_key_hash="checkout-key-hash",
+        request_fingerprint="checkout-fingerprint",
+    )
+    fixed_datetime.fixed_now += timedelta(minutes=15)
+    recovered = attendance_service.check_out(
+        "EMP001",
+        idempotency_key_hash="checkout-key-hash",
+        request_fingerprint="checkout-fingerprint",
+    )
+
+    assert recovered == first
+    assert recovered.exit_time == first.exit_time
+    assert len(records.documents) == 1
+
+
+def test_check_out_with_new_key_does_not_overwrite_existing_checkout(
+    attendance_db,
+):
+    _, records = attendance_db
+    attendance_service.check_in("EMP001")
+    first = attendance_service.check_out("EMP001")
+    fixed_exit_time = records.documents[0]["exit_time"]
+
+    with pytest.raises(HTTPException) as error:
+        attendance_service.check_out("EMP001")
+
+    assert error.value.status_code == 409
+    assert records.documents[0]["exit_time"] == fixed_exit_time
+    assert first.exit_time == fixed_exit_time
+
+
 def test_check_out_requires_check_in(attendance_db):
     with pytest.raises(HTTPException) as error:
         attendance_service.check_out("EMP001")
 
     assert error.value.status_code == 404
+
+
+def test_attendance_write_routes_expose_idempotency_header():
+    app = FastAPI()
+    app.include_router(attendance_router)
+    schema = app.openapi()
+
+    for path in (
+        "/api/v1/attendance/check-in",
+        "/api/v1/attendance/check-out",
+    ):
+        parameters = schema["paths"][path]["post"]["parameters"]
+        header = next(
+            parameter
+            for parameter in parameters
+            if parameter["name"] == "Idempotency-Key"
+        )
+        assert header["in"] == "header"
+        assert header["required"] is True
+        assert header["schema"]["minLength"] == 1
+        assert header["schema"]["maxLength"] == 200

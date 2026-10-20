@@ -48,6 +48,9 @@ attendance_collection = database["attendance"]
 # MongoDB collection for email notification history.
 notifications_collection = database["notifications"]
 
+# MongoDB collection that tracks queued employee import jobs.
+employee_import_jobs_collection = database["employee_import_jobs"]
+
 
 def _drop_legacy_indexes(
     collection: Collection,
@@ -118,6 +121,20 @@ def create_attendance_indexes() -> None:
     # Efficient tenant-scoped attendance lookups.
     attendance_collection.create_index(
         [("tenant_id", 1), ("employee_id", 1), ("date", -1)],
+    )
+
+    # Keep check-in retries associated with their original attendance record.
+    attendance_collection.create_index(
+        [("tenant_id", 1), ("check_in_idempotency_key_hash", 1)],
+        unique=True,
+        partialFilterExpression={"check_in_idempotency_key_hash": {"$type": "string"}},
+    )
+
+    # Keep check-out retries associated with the attendance record they updated.
+    attendance_collection.create_index(
+        [("tenant_id", 1), ("check_out_idempotency_key_hash", 1)],
+        unique=True,
+        partialFilterExpression={"check_out_idempotency_key_hash": {"$type": "string"}},
     )
 
     # Speed up report queries that filter attendance by date within a tenant.

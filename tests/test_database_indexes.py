@@ -43,6 +43,16 @@ def test_attendance_indexes_replace_legacy_global_uniqueness(monkeypatch):
         [("tenant_id", 1), ("employee_id", 1), ("date", 1)],
         unique=True,
     )
+    attendance.create_index.assert_any_call(
+        [("tenant_id", 1), ("check_in_idempotency_key_hash", 1)],
+        unique=True,
+        partialFilterExpression={"check_in_idempotency_key_hash": {"$type": "string"}},
+    )
+    attendance.create_index.assert_any_call(
+        [("tenant_id", 1), ("check_out_idempotency_key_hash", 1)],
+        unique=True,
+        partialFilterExpression={"check_out_idempotency_key_hash": {"$type": "string"}},
+    )
 
 
 def test_notification_indexes_replace_legacy_global_uniqueness(monkeypatch):
